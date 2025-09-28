@@ -1,55 +1,154 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import requests
+import json
+import math
 
-st.set_page_config(page_title="Finance Assistant", page_icon="💰", layout="wide")
+# ----------------------------
+# CONFIG
+# ----------------------------
+st.set_page_config(
+    page_title="Finance Assistant MVP",
+    page_icon="💰",
+    layout="wide"
+)
 
-st.title("💰 Personal Finance Assistant (MVP)")
+# Secrets
+PERP_API_KEY = st.secrets.get("PERPLEXITY_API_KEY", None)
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)
 
-uploaded_file = st.file_uploader("📂 Upload your bank transaction history (CSV)", type=["csv"])
+PERP_CHAT_ENDPOINT = "https://api.perplexity.ai/chat/completions"  # check docs
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# ----------------------------
+# DATA LOADING
+# ----------------------------
+@st.cache_data
+def load_data():
+    return pd.read_csv("transactions.csv")
 
-    st.subheader("📊 Transaction Data Preview")
+transactions = load_data()
 
-    # Pagination (5 transactions per page)
-    items_per_page = 5
-    total_pages = (len(df) - 1) // items_per_page + 1
-    page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
+# ----------------------------
+# SIDEBAR
+# ----------------------------
+st.sidebar.title("⚙️ Settings")
+goal = st.sidebar.text_input("🎯 Enter your savings goal", placeholder="e.g., Save ₹50,000 in 6 months")
 
-    start = (page - 1) * items_per_page
-    end = start + items_per_page
-    st.dataframe(df.iloc[start:end], use_container_width=True)
+st.sidebar.markdown("---")
+st.sidebar.info("Upload your own CSV in the future version!")
 
-    # Calculate inflow/outflow
-    inflow = df[df['Type'] == 'Inflow']['Amount'].sum()
-    outflow = df[df['Type'] == 'Outflow']['Amount'].sum()
+# ----------------------------
+# UI HEADER
+# ----------------------------
+st.title("💰 Smart Finance Assistant")
+st.markdown("Analyze your transactions, set savings goals, and get **AI-powered insights**.")
 
-    # Ensure positive for pie chart
-    inflow = abs(inflow)
-    outflow = abs(outflow)
-    savings = inflow - outflow
+# ----------------------------
+# TRANSACTIONS CAROUSEL
+# ----------------------------
+st.subheader("📑 Transactions")
 
-    st.subheader("💵 Summary")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Inflow", f"₹{inflow:,.2f}")
-    col2.metric("Outflow", f"₹{outflow:,.2f}")
-    col3.metric("Net Savings", f"₹{savings:,.2f}")
+page_size = 5
+total_pages = math.ceil(len(transactions) / page_size)
+page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
 
-    # Pie chart
-    st.subheader("📈 Inflow vs Outflow")
+start = (page - 1) * page_size
+end = start + page_size
+st.dataframe(transactions.iloc[start:end], use_container_width=True)
+
+# ----------------------------
+# INFLOW / OUTFLOW CHART
+# ----------------------------
+inflow = transactions[transactions["Type"] == "Credit"]["Amount"].sum()
+outflow = transactions[transactions["Type"] == "Debit"]["Amount"].sum()
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric("Total Inflow", f"₹{inflow:,.0f}")
+    st.metric("Total Outflow", f"₹{outflow:,.0f}")
+
+with col2:
     fig, ax = plt.subplots()
-    ax.pie([inflow, outflow], labels=["Inflow", "Outflow"], autopct='%1.1f%%', startangle=90)
+    ax.pie(
+        [max(inflow, 0), max(outflow, 0)],
+        labels=["Inflow", "Outflow"],
+        autopct='%1.1f%%',
+        startangle=90,
+        colors=["#4CAF50", "#F44336"]
+    )
     ax.axis("equal")
     st.pyplot(fig)
 
-    # Dummy AI insights
-    st.subheader("🤖 AI Recommendation")
-    if savings > 0:
-        st.success(f"Great job! You're saving money. Consider investing ₹{round(savings*0.3)} into SIPs.")
-    else:
-        st.warning("Your expenses exceed income. Try reducing discretionary spendings like dining out or subscriptions.")
+# ----------------------------
+# AI HELPERS
+# ----------------------------
+def call_perplexity(prompt):
+    if not PERP_API_KEY:
+        return None
 
-else:
-    st.info("Please upload a CSV file to begin.")
+    headers = {
+        "Authorization": f"Bearer {PERP_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "sonar-medium-chat",  # adjust based on docs
+        "messages": [{"role": "user", "content": prompt}]
+    }
+
+    try:
+        resp = requests.post(PERP_CHAT_ENDPOINT, headers=headers, json=payload)
+        if resp.status_code == 200:
+            j = resp.json()
+            return j["choices"][0]["message"]["content"]
+        else:
+            return f"⚠️ Perplexity error: {resp.status_code} - {resp.text}"
+    except Exception as e:
+        return f"⚠️ Perplexity call failed: {e}"
+
+
+def analyze_transactions(transactions, goal=None):
+    trans_text = transactions.to_string(index=False)
+    prompt = f"""
+    You are a personal finance assistant.
+    Here is the transaction history:
+    {trans_text}
+
+    1. Summarize inflow & outflow.
+    2. Highlight unusual or big expenses.
+    3. Suggest 2-3 budgeting strategies.
+    """
+
+    if goal:
+        prompt += f"\nAlso, suggest strategies to achieve this goal: {goal}"
+
+    return call_perplexity(prompt)
+
+
+def query_transactions(transactions, user_query):
+    trans_text = transactions.to_string(index=False)
+    prompt = f"""
+    You are a finance AI. Answer user queries from this transaction history:
+    {trans_text}
+
+    Question: {user_query}
+    """
+    return call_perplexity(prompt)
+
+# ----------------------------
+# AI INSIGHTS
+# ----------------------------
+if st.button("🔍 Get AI Insights"):
+    report = analyze_transactions(transactions, goal)
+    st.subheader("📊 AI Insights")
+    st.write(report)
+
+# ----------------------------
+# Q&A
+# ----------------------------
+st.subheader("💬 Ask AI About Your Finances")
+user_query = st.text_input("Type your question", placeholder="e.g., How much did I spend on food?")
+if user_query:
+    answer = query_transactions(transactions, user_query)
+    st.success(answer)
