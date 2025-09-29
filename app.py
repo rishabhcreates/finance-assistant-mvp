@@ -6,9 +6,8 @@ import requests
 # Page Config
 # -----------------------
 st.set_page_config(page_title="Finance Assistant", layout="wide")
-
 st.title("💰 Personal Finance Assistant")
-st.markdown("Upload your transactions and get **AI-powered insights** into your spending habits.")
+st.markdown("Upload your transactions and get AI-powered insights into your finances.")
 
 # -----------------------
 # File Uploader
@@ -18,8 +17,8 @@ uploaded_file = st.file_uploader("📂 Upload your transactions CSV", type=["csv
 # -----------------------
 # Helper - AI Call
 # -----------------------
-def get_ai_suggestions(goal, transactions):
-    """Send goal + transaction summary to Perplexity API"""
+def get_ai_suggestions(goal, inflow, outflow, breakdown):
+    """Send goal + financial summary to Perplexity API"""
     api_key = st.secrets["PERPLEXITY_API_KEY"]
     url = "https://api.perplexity.ai/chat/completions"
     headers = {
@@ -27,26 +26,22 @@ def get_ai_suggestions(goal, transactions):
         "Content-Type": "application/json"
     }
 
-    # Summarize transactions for context
-    tx_summary = (
-        transactions.groupby("category")["amount"].sum().reset_index().to_dict(orient="records")
-        if "category" in transactions.columns else []
+    # AI prompt includes numbers and breakdown
+    content = (
+        f"My financial goal is: {goal}.\n"
+        f"Summary:\n- Total inflow: ₹{inflow}\n- Total outflow: ₹{outflow}\n"
+        f"- Breakdown by category: {breakdown}\n"
+        "Provide 3 specific, actionable steps with numbers for saving, investing, or SIPs."
     )
 
     payload = {
-        "model": "sonar",  # ✅ supported sonar model
+        "model": "sonar-pro",
         "messages": [
-            {
-                "role": "system",
-                "content": "You are a financial advisor. Provide practical, concise suggestions."
-            },
-            {
-                "role": "user",
-                "content": f"My goal is: {goal}. Based on my spending summary: {tx_summary}, suggest 3 actionable measures."
-            }
+            {"role": "system", "content": "You are a financial advisor."},
+            {"role": "user", "content": content}
         ],
         "temperature": 0.7,
-        "max_tokens": 300
+        "max_tokens": 400
     }
 
     response = requests.post(url, headers=headers, json=payload)
@@ -64,50 +59,62 @@ def get_ai_suggestions(goal, transactions):
 if uploaded_file is not None:
     try:
         transactions = pd.read_csv(uploaded_file)
-
-        # Normalize column names
-        transactions.columns = [col.strip().lower() for col in transactions.columns]
+        transactions.columns = [c.strip().lower() for c in transactions.columns]
 
         if "amount" not in transactions.columns:
             st.error("CSV must include an `amount` column.")
         else:
             st.success("✅ Transactions loaded successfully!")
 
-            # Preview
+            # -----------------------
+            # Inflow & Outflow
+            # -----------------------
+            inflow = transactions[transactions["amount"] > 0]["amount"].sum()
+            outflow = -transactions[transactions["amount"] < 0]["amount"].sum()  # make positive
+
+            st.subheader("📈 Inflow vs Outflow")
+            col1, col2 = st.columns(2)
+            col1.metric("Total Inflow", f"₹{inflow:,.2f}")
+            col2.metric("Total Outflow", f"₹{outflow:,.2f}")
+
+            st.write("### 🥧 Proportional Chart")
+            st.pyplot(
+                pd.DataFrame({"Type": ["Inflow", "Outflow"], "Amount": [inflow, outflow]}).plot(
+                    kind="pie", y="Amount", labels=["Inflow", "Outflow"], autopct="%1.1f%%", legend=False
+                ).figure
+            )
+
+            # -----------------------
+            # Transactions Preview
+            # -----------------------
             st.subheader("📊 Transactions Preview")
             st.dataframe(transactions.head(10), use_container_width=True)
 
-            # Summary
-            st.subheader("📈 Summary")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Total Transactions", len(transactions))
-            with col2:
-                st.metric("Total Spent", f"${transactions['amount'].sum():,.2f}")
-
-            # Category breakdown
+            # -----------------------
+            # Category Breakdown
+            # -----------------------
             if "category" in transactions.columns:
-                st.subheader("📌 Spending by Category")
-                category_summary = (
-                    transactions.groupby("category")["amount"].sum()
-                    .reset_index().sort_values(by="amount", ascending=False)
-                )
-                st.bar_chart(category_summary.set_index("category"))
+                st.subheader("📌 Spending/Investments by Category")
+                breakdown = transactions.groupby("category")["amount"].sum().reset_index()
+                st.bar_chart(breakdown.set_index("category"))
             else:
-                st.info("No `category` column found. Add one to see breakdown.")
+                st.info("No `category` column found. Add one for breakdown.")
+                breakdown = []
 
-            # Goal + AI
+            # -----------------------
+            # Goal + AI Suggestions
+            # -----------------------
             st.subheader("🎯 Set a Goal & Get AI Suggestions")
-            goal = st.text_input("Enter your financial goal (e.g., 'Save 10,000 for emergency fund')")
+            goal = st.text_input("Enter your financial goal (e.g., 'Save ₹50,000 in 6 months')")
 
             if goal:
-                with st.spinner("💡 Getting AI suggestions..."):
-                    suggestions = get_ai_suggestions(goal, transactions)
+                with st.spinner("💡 Generating AI suggestions..."):
+                    breakdown_dict = breakdown.to_dict(orient="records") if len(breakdown) > 0 else []
+                    suggestions = get_ai_suggestions(goal, inflow, outflow, breakdown_dict)
                 st.markdown("### 🤖 AI Recommendations")
                 st.write(suggestions)
 
     except Exception as e:
         st.error(f"Error reading file: {e}")
-
 else:
     st.info("👆 Please upload a CSV file to get started.")
