@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import matplotlib.pyplot as plt
 
 # -----------------------
 # Page Config
@@ -18,7 +19,6 @@ uploaded_file = st.file_uploader("📂 Upload your transactions CSV", type=["csv
 # Helper - AI Call
 # -----------------------
 def get_ai_suggestions(goal, inflow, outflow, breakdown):
-    """Send goal + financial summary to Perplexity API"""
     api_key = st.secrets["PERPLEXITY_API_KEY"]
     url = "https://api.perplexity.ai/chat/completions"
     headers = {
@@ -26,7 +26,6 @@ def get_ai_suggestions(goal, inflow, outflow, breakdown):
         "Content-Type": "application/json"
     }
 
-    # AI prompt includes numbers and breakdown
     content = (
         f"My financial goal is: {goal}.\n"
         f"Summary:\n- Total inflow: ₹{inflow}\n- Total outflow: ₹{outflow}\n"
@@ -77,12 +76,11 @@ if uploaded_file is not None:
             col1.metric("Total Inflow", f"₹{inflow:,.2f}")
             col2.metric("Total Outflow", f"₹{outflow:,.2f}")
 
-            st.write("### 🥧 Proportional Chart")
-            st.pyplot(
-                pd.DataFrame({"Type": ["Inflow", "Outflow"], "Amount": [inflow, outflow]}).plot(
-                    kind="pie", y="Amount", labels=["Inflow", "Outflow"], autopct="%1.1f%%", legend=False
-                ).figure
-            )
+            # Proper pie chart
+            fig, ax = plt.subplots()
+            ax.pie([inflow, outflow], labels=["Inflow", "Outflow"], autopct="%1.1f%%", startangle=90, colors=["#4CAF50", "#F44336"])
+            ax.set_title("Inflow vs Outflow")
+            st.pyplot(fig)
 
             # -----------------------
             # Transactions Preview
