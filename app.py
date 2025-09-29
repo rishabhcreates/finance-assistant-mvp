@@ -34,7 +34,7 @@ def get_ai_suggestions(goal, inflow, outflow, breakdown):
     )
 
     payload = {
-        "model": "sonar-pro",
+        "model": "sonar",
         "messages": [
             {"role": "system", "content": "You are a financial advisor."},
             {"role": "user", "content": content}
