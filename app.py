@@ -34,7 +34,7 @@ def get_ai_suggestions(goal, transactions):
     )
 
     payload = {
-        "model": "llama-3.1-sonar-small-128k-online",  # small + online for MVP
+        "model": "llama-3.1-sonar-small-128k-chat",  # small + online for MVP
         "messages": [
             {
                 "role": "system",
