@@ -93,16 +93,15 @@ if uploaded_file is not None:
             st.subheader("📊 Transactions Preview")
             st.dataframe(transactions.head(10), use_container_width=True)
 
-            # -----------------------
             # Category Breakdown
-            # -----------------------
             if "category" in transactions.columns:
-                st.subheader("📌 Spending/Investments by Category")
-                breakdown = transactions.groupby("category")["amount"].sum().reset_index()
-                st.bar_chart(breakdown.set_index("category"))
-            else:
-                st.info("No `category` column found. Add one for breakdown.")
-                breakdown = []
+            st.subheader("📌 Spending/Investments by Category")
+            breakdown = transactions.groupby("category")["amount"].sum().reset_index()  # <- call reset_index()
+            st.bar_chart(breakdown.set_index("category"))
+        
+            # AI Suggestions
+            breakdown_dict = breakdown.to_dict(orient="records") if len(breakdown) > 0 else []
+
 
             # -----------------------
             # Goal + AI Suggestions
