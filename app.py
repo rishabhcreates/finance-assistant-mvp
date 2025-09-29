@@ -68,19 +68,24 @@ if uploaded_file is not None:
             # -----------------------
             # Inflow & Outflow
             # -----------------------
-            inflow = transactions[transactions["amount"] > 0]["amount"].sum()
-            outflow = -transactions[transactions["amount"] < 0]["amount"].sum()  # make positive
-
+            if "type" in transactions.columns:
+                inflow = transactions.loc[transactions["type"].str.lower() == "inflow", "amount"].sum()
+                outflow = transactions.loc[transactions["type"].str.lower() == "outflow", "amount"].sum()
+            else:
+                inflow = transactions[transactions["amount"] > 0]["amount"].sum()
+                outflow = -transactions[transactions["amount"] < 0]["amount"].sum()  # make positive
+            
             st.subheader("📈 Inflow vs Outflow")
             col1, col2 = st.columns(2)
             col1.metric("Total Inflow", f"₹{inflow:,.2f}")
             col2.metric("Total Outflow", f"₹{outflow:,.2f}")
-
-            # Proper pie chart
+            
+            # Pie chart
             fig, ax = plt.subplots()
             ax.pie([inflow, outflow], labels=["Inflow", "Outflow"], autopct="%1.1f%%", startangle=90, colors=["#4CAF50", "#F44336"])
             ax.set_title("Inflow vs Outflow")
             st.pyplot(fig)
+
 
             # -----------------------
             # Transactions Preview
