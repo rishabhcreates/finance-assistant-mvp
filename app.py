@@ -19,7 +19,7 @@ uploaded_file = st.file_uploader("📂 Upload your transactions CSV", type=["csv
 # Helper - AI Call
 # -----------------------
 def get_ai_suggestions(goal, inflow, outflow, breakdown):
-    api_key = st.secrets["PERPLEXITY_API_KEY"]
+    api_key = st.secrets.get["PERPLEXITY_API_KEY"]
     url = "https://api.perplexity.ai/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
