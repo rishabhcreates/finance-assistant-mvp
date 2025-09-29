@@ -34,7 +34,7 @@ def get_ai_suggestions(goal, transactions):
     )
 
     payload = {
-        "model": "sonar",  # ✅ updated to supported Sonar model
+        "model": "sonar",  # ✅ supported sonar model
         "messages": [
             {
                 "role": "system",
@@ -51,7 +51,10 @@ def get_ai_suggestions(goal, transactions):
 
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
+        try:
+            return response.json()["choices"][0]["message"]["content"]
+        except (KeyError, IndexError):
+            return "⚠️ Unexpected response format from API."
     else:
         return f"⚠️ API Error: {response.text}"
 
